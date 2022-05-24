@@ -3,9 +3,9 @@
   "description": "Displays a circular battery indicator", 
   "name": "Circular Battery Indicator", 
   "shell-version": [
-    "3.24.2"
+    "42"
   ], 
   "url": "", 
   "uuid": "circular-battery-indicator@tannick.io", 
-  "version": 1
+  "version": 2
 }
