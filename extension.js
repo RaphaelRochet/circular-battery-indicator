@@ -26,7 +26,7 @@ const CircularBatteryIndicatorHandler = new Lang.Class({
 
     _percentage: null,
     _charging: false,
-
+    _idle: false,
     _origIndicator: null,
     _indicator: null,
     _repaintId: null,
@@ -58,10 +58,13 @@ const CircularBatteryIndicatorHandler = new Lang.Class({
         let _onPowerChanged = function() {
             if (this._proxy.IsPresent) {
                 that._percentage = this._proxy.Percentage;
-                that._charging = this._proxy.State == UPower.DeviceState.CHARGING 
-                                || this._proxy.State == UPower.DeviceState.FULLY_CHARGED;
+                that._charging = this._proxy.State == UPower.DeviceState.CHARGING ;
+                that._idle = this._proxy.State == UPower.DeviceState.FULLY_CHARGED
+                             || this._proxy.State == UPower.DeviceState.PENDING_CHARGE ;
             } else {
                 that._percentage = null;
+                that._idle = false;
+                that._charging = false;
             }
             that.updateDisplay.call(that);
         }
@@ -116,6 +119,12 @@ const CircularBatteryIndicatorHandler = new Lang.Class({
             ctx.arc(0, 0, inner - width * 1.4, 0, 2 * Math.PI);
             ctx.fill();
             // TODO: Animation?
+        }
+
+        if (this._idle) {
+            Clutter.cairo_set_source_color(ctx, color.darken().darken());
+            ctx.arc(0, 0, inner - width * 1.4, 0, 2 * Math.PI);
+            ctx.fill();
         }
 
         ctx.restore();
