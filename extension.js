@@ -14,124 +14,123 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 **/
 
-const Lang = imports.lang;
-const Clutter = imports.gi.Clutter;
 const St = imports.gi.St;
-const Main = imports.ui.main;
+const GObject = imports.gi.GObject;
+const Clutter = imports.gi.Clutter;
 const UPower = imports.gi.UPowerGlib;
+
+const Main = imports.ui.main;
 const Panel = imports.ui.panel;
 
-const CircularBatteryIndicatorHandler = new Lang.Class({
-    Name: "CircularBatteryIndicatorHandler",
+const CircularBatteryIndicator = GObject.registerClass(
+	{
+		_percentage: null,
+		_charging: false,
+		_idle: false,
+		_origIndicator: null,
+		_indicator: null,
+		_repaintId: null,
+		_powerProxyId: null,
+	},
+class CircularBatteryIndicator extends GObject.Object {
 
-    _percentage: null,
-    _charging: false,
-    _idle: false,
-    _origIndicator: null,
-    _indicator: null,
-    _repaintId: null,
+	_init() {
+		this._origIndicator = this._power._indicator;
+		this._indicator = new St.DrawingArea({ y_align: Clutter.ActorAlign.CENTER });
 
-    _powerProxyId: null,
+		this._indicator.set_width(1.6 * Panel.PANEL_ICON_SIZE);
+		this._indicator.set_height(1.1 * Panel.PANEL_ICON_SIZE);
 
-    get _power() {
-        return Main.panel.statusArea.aggregateMenu._power;
-    },
+		// gfx
+		this._power.indicators.replace_child(this._origIndicator, this._indicator);
+		this._repaintId = this._indicator.connect("repaint", this._paintIndicator.bind(this));
 
-    _init() {
-        this._origIndicator = this._power._indicator;
-    },
+		// events
+		this._powerProxyId = this._power._proxy.connect('g-properties-changed', this._onPowerChanged.bind(this));
 
-    enable() {
-        this._indicator = new St.DrawingArea({ y_align: Clutter.ActorAlign.CENTER });
+		this._onPowerChanged();
+	}
 
-        this._indicator.set_width(1.6 * Panel.PANEL_ICON_SIZE);
-        this._indicator.set_height(1.1 * Panel.PANEL_ICON_SIZE);
+	get _power() {
+		return Main.panel.statusArea.aggregateMenu._power;
+	}
 
-        let that = this;
-        let power = this._power;
+	_onPowerChanged() {
+		if (this._power._proxy.IsPresent) {
+			this._percentage = this._power._proxy.Percentage;
+			this._charging = this._power._proxy.State == UPower.DeviceState.CHARGING ;
+			this._idle = this._power._proxy.State == UPower.DeviceState.FULLY_CHARGED
+						|| this._power._proxy.State == UPower.DeviceState.PENDING_CHARGE ;
+		} else {
+			this._percentage = null;
+			this._idle = false;
+			this._charging = false;
+		}
+		this.updateDisplay();
+	}
 
-        // gfx
-        power.indicators.replace_child(this._origIndicator, this._indicator);
-        this._repaintId = this._indicator.connect("repaint", Lang.bind(this, this._paintIndicator));
+	updateDisplay() {
+		if (this._percentage) {
+			this._indicator.queue_repaint();
+		}
+	}
 
-        // events
-        let _onPowerChanged = function() {
-            if (this._proxy.IsPresent) {
-                that._percentage = this._proxy.Percentage;
-                that._charging = this._proxy.State == UPower.DeviceState.CHARGING ;
-                that._idle = this._proxy.State == UPower.DeviceState.FULLY_CHARGED
-                             || this._proxy.State == UPower.DeviceState.PENDING_CHARGE ;
-            } else {
-                that._percentage = null;
-                that._idle = false;
-                that._charging = false;
-            }
-            that.updateDisplay.call(that);
-        }
+	destroy() {
+		this._power.indicators.replace_child(this._indicator, this._origIndicator);
+		this._indicator.disconnect(this._repaintId);
+		this._power._proxy.disconnect(this._powerProxyId);
+		this._indicator.destroy();
+	}
 
-        this._powerProxyId = power._proxy.connect('g-properties-changed', Lang.bind(power, _onPowerChanged));
-        _onPowerChanged.call(power);
-    },
+	_paintIndicator(area) {
+		let ctx = area.get_context();
 
-    disable() {
-        this._power.indicators.replace_child(this._indicator, this._origIndicator);
+		let themeNode = this._indicator.get_theme_node();
+		let color = themeNode.get_foreground_color();
 
-        this._indicator.disconnect(this._repaintId);
-        this._power._proxy.disconnect(this._powerProxyId);
-        this._indicator.destroy();
-    },
+		let areaWidth = area.get_width();
+		let areaHeight = area.get_height();
 
-    updateDisplay() {
-        if (this._percentage) {
-            this._indicator.queue_repaint();
-        }
-    },
+		let outer = Math.min(areaHeight, areaWidth ) / 2;
+		let width = outer * 0.285;
+		let inner = outer - (width / 2);
 
-    // TODO: Seperate into own actor
-    _paintIndicator(area) {
-        let ctx = area.get_context();
+		Clutter.cairo_set_source_color(ctx, color.darken().darken());
+		ctx.save();
+		ctx.translate(areaWidth / 2.0, areaHeight / 2.0);
+		ctx.rotate(3 / 2 * Math.PI);
 
-        let themeNode = this._indicator.get_theme_node();
-        let color = themeNode.get_foreground_color();
+		ctx.setLineWidth(width);
+		ctx.arc(0, 0, inner, 0, 2 * Math.PI);
+		ctx.stroke();
 
-        let areaWidth = area.get_width();
-        let areaHeight = area.get_height();
+		Clutter.cairo_set_source_color(ctx, color);
+		ctx.setLineWidth(width);
+		ctx.arc(0, 0, inner, 0, (this._percentage / 100) * 2 * Math.PI);
+		ctx.stroke();
 
-        let outer = Math.min(areaHeight, areaWidth ) / 2;
-        let width = outer * 0.285;
-        let inner = outer - (width / 2);
+		if (this._charging) {
+			ctx.arc(0, 0, inner - width * 1.4, 0, 2 * Math.PI);
+			ctx.fill();
+		}
 
-        Clutter.cairo_set_source_color(ctx, color.darken().darken());
-        ctx.save();
-        ctx.translate(areaWidth / 2.0, areaHeight / 2.0);
-        ctx.rotate(3 / 2 * Math.PI);
+		if (this._idle) {
+			Clutter.cairo_set_source_color(ctx, color.darken().darken());
+			ctx.arc(0, 0, inner - width * 1.4, 0, 2 * Math.PI);
+			ctx.fill();
+		}
 
-        ctx.setLineWidth(width);
-        ctx.arc(0, 0, inner, 0, 2 * Math.PI);
-        ctx.stroke();
-
-        Clutter.cairo_set_source_color(ctx, color);
-        ctx.setLineWidth(width);
-        ctx.arc(0, 0, inner, 0, (this._percentage / 100) * 2 * Math.PI);
-        ctx.stroke();
-
-        if (this._charging) {
-            ctx.arc(0, 0, inner - width * 1.4, 0, 2 * Math.PI);
-            ctx.fill();
-            // TODO: Animation?
-        }
-
-        if (this._idle) {
-            Clutter.cairo_set_source_color(ctx, color.darken().darken());
-            ctx.arc(0, 0, inner - width * 1.4, 0, 2 * Math.PI);
-            ctx.fill();
-        }
-
-        ctx.restore();
-    }
+		ctx.restore();
+	}
 
 });
 
-function init() {
-    return new CircularBatteryIndicatorHandler();
+let circularbatteryindicator;
+
+function enable() {
+	circularbatteryindicator = new CircularBatteryIndicator();
+}
+
+function disable() {
+	circularbatteryindicator.destroy();
 }
