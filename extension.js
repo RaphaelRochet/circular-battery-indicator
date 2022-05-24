@@ -42,7 +42,7 @@ class CircularBatteryIndicator extends GObject.Object {
 		this._indicator.set_height(1.1 * Panel.PANEL_ICON_SIZE);
 
 		// gfx
-		this._power.indicators.replace_child(this._origIndicator, this._indicator);
+		this._power.replace_child(this._origIndicator, this._indicator);
 		this._repaintId = this._indicator.connect("repaint", this._paintIndicator.bind(this));
 
 		// events
@@ -76,7 +76,7 @@ class CircularBatteryIndicator extends GObject.Object {
 	}
 
 	destroy() {
-		this._power.indicators.replace_child(this._indicator, this._origIndicator);
+		this._power.replace_child(this._indicator, this._origIndicator);
 		this._indicator.disconnect(this._repaintId);
 		this._power._proxy.disconnect(this._powerProxyId);
 		this._indicator.destroy();
