@@ -21,6 +21,7 @@
 const St = imports.gi.St;
 const GObject = imports.gi.GObject;
 const Clutter = imports.gi.Clutter;
+const Gio = imports.gi.Gio;
 const UPower = imports.gi.UPowerGlib;
 
 const Main = imports.ui.main;
@@ -52,6 +53,10 @@ class CircularBatteryIndicator extends GObject.Object {
 		// events
 		this._powerProxyId = this._power._proxy.connect('g-properties-changed', this._onPowerChanged.bind(this));
 
+		// To react to setting
+		this._desktopSettings = new Gio.Settings({ schema_id: 'org.gnome.desktop.interface' });
+		this._desktopSettings.connect('changed::show-battery-percentage', this._onPowerChanged.bind(this));
+
 		this._onPowerChanged();
 	}
 
@@ -69,6 +74,11 @@ class CircularBatteryIndicator extends GObject.Object {
 			this._percentage = null;
 			this._idle = false;
 			this._charging = false;
+		}
+		if (this._desktopSettings.get_boolean('show-battery-percentage')) {
+			this._indicator.add_style_class_name('circular-battery-indicator-text');
+		} else {
+			this._indicator.remove_style_class_name('circular-battery-indicator-text');
 		}
 		this.updateDisplay();
 	}
@@ -101,7 +111,7 @@ class CircularBatteryIndicator extends GObject.Object {
 
 		Clutter.cairo_set_source_color(ctx, color.darken().darken());
 		ctx.save();
-		ctx.translate(areaWidth / 2.0, areaHeight / 2.0);
+		ctx.translate(areaHeight / 2.0, areaHeight / 2.0);
 		ctx.rotate(3 / 2 * Math.PI);
 
 		ctx.setLineWidth(width);
