@@ -42,8 +42,8 @@ class CircularBatteryIndicator extends GObject.Object {
 		this._origIndicator = this._power._indicator;
 		this._indicator = new St.DrawingArea({ y_align: Clutter.ActorAlign.CENTER });
 
-		this._indicator.set_width(1.6 * Panel.PANEL_ICON_SIZE);
-		this._indicator.set_height(1.1 * Panel.PANEL_ICON_SIZE);
+		this._indicator.set_width(Panel.PANEL_ICON_SIZE);
+		this._indicator.set_height(Panel.PANEL_ICON_SIZE);
 
 		// gfx
 		this._power.replace_child(this._origIndicator, this._indicator);
