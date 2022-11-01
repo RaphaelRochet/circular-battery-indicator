@@ -3,9 +3,9 @@
   "description": "Displays a circular battery indicator",
   "name": "Circular Battery Indicator",
   "shell-version": [
-    "42"
+    "43"
   ],
   "url": "https://github.com/RaphaelRochet/circular-battery-indicator",
   "uuid": "circular-battery-indicator@RaphaelRochet",
-  "version": 1
+  "version": 2
 }

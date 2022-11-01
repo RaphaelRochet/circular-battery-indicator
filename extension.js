@@ -21,6 +21,7 @@
 const St = imports.gi.St;
 const GObject = imports.gi.GObject;
 const Clutter = imports.gi.Clutter;
+const GLib = imports.gi.GLib;
 const Gio = imports.gi.Gio;
 const UPower = imports.gi.UPowerGlib;
 
@@ -29,77 +30,110 @@ const Panel = imports.ui.panel;
 
 const CircularBatteryIndicator = GObject.registerClass(
 	{
-		_percentage: null,
-		_charging: false,
-		_idle: false,
-		_origIndicator: null,
-		_indicator: null,
-		_repaintId: null,
+		_pT: null,				// the PowerToggle instance
+		_old_qs_icon: null,		// ref to icon in quickSettings we replace (to put it back later)
+		_indic_box: null, 		// ref to indicator container (contains battery icon and percentage text)
+		_old_indic_icon: null,	// ref to indicator icon we replace (to put it back later)
+		_qs_drawing: null,		// drawing replacement for QuickSettings panel
+		_indic_drawing: null,	// drawing replacement for indicator panel
+		_percentage: null,		// % full
+		_charging: null,		// is battery charging
+		_idle: null,			// is plugged but not charging
+		// Various event Id we shall track to disable later
+		_TimeoutId: null,
+		_qs_repaintId: null,
+		_indic_repaintId: null,
 		_powerProxyId: null,
 	},
+
 class CircularBatteryIndicator extends GObject.Object {
 
 	_init() {
-		this._origIndicator = this._power._indicator;
-		this._indicator = new St.DrawingArea({ y_align: Clutter.ActorAlign.CENTER });
+		// Prepare drawing areas
+		this._indic_drawing = new St.DrawingArea({ y_align: Clutter.ActorAlign.CENTER });
+		this._indic_drawing.set_width(Panel.PANEL_ICON_SIZE);
+		this._indic_drawing.set_height(Panel.PANEL_ICON_SIZE);
+		this._qs_drawing = new St.DrawingArea({ y_align: Clutter.ActorAlign.CENTER });
+		this._qs_drawing.set_width(Panel.PANEL_ICON_SIZE);
+		this._qs_drawing.set_height(Panel.PANEL_ICON_SIZE);
+		this.patch();
+	}
 
-		this._indicator.set_width(Panel.PANEL_ICON_SIZE);
-		this._indicator.set_height(Panel.PANEL_ICON_SIZE);
-
-		// gfx
-		this._power.replace_child(this._origIndicator, this._indicator);
-		this._repaintId = this._indicator.connect("repaint", this._paintIndicator.bind(this));
-
-		// events
-		this._powerProxyId = this._power._proxy.connect('g-properties-changed', this._onPowerChanged.bind(this));
-
-		// To react to setting
+	patch() {
+		if (this._TimeoutId) GLib.source_remove(this._TimeoutId);
+		if (this._pT) {
+			return;
+		}
+		var PowerToggle = imports.ui.status.system.PowerToggle;
+		if (!PowerToggle) {
+			this._TimeoutId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 1, ()=>{this.patch();	return true;});
+			return;
+		}
+		// Replace indicator icon with our drawing
+		// We don't want to mess with battery percentage text but focus on the icon
+		this._old_indic_icon = Main.panel.statusArea.quickSettings._system._indicator;
+		this._indic_box = Main.panel.statusArea.quickSettings._system._indicator.get_parent();
+		this._indic_box.replace_child(this._old_indic_icon, this._indic_drawing);
+		this._indic_repaintId = this._indic_drawing.connect("repaint", this.draw.bind(this));
+		// Replace quicksettings battery icon by our drawing and capture repaint event
+		this._pT = Main.panel.statusArea.quickSettings._system._systemItem._powerToggle;
+		this._old_qs_icon = this._pT._icon;
+		this._pT._box.replace_child(this._pT._icon, this._qs_drawing);
+		this._qs_repaintId = this._qs_drawing.connect("repaint", this.draw.bind(this));
+		// React to power changes
+		let proxy = this._pT._proxy;
+		this._powerProxyId = proxy.connect('g-properties-changed', this._onPowerChanged.bind(this));
+		// React to setting
 		this._desktopSettings = new Gio.Settings({ schema_id: 'org.gnome.desktop.interface' });
 		this._desktopSettings.connect('changed::show-battery-percentage', this._onPowerChanged.bind(this));
-
+		// Update now
 		this._onPowerChanged();
 	}
 
-	get _power() {
-		return Main.panel.statusArea.aggregateMenu._power;
+	destroy() {
+		if (this._TimeoutId) GLib.source_remove(this._TimeoutId);
+		if (this._pT) {
+			// Put icons back in place
+			this._pT._box.replace_child(this._qs_drawing, this._old_qs_icon);
+			this._indic_box.replace_child(this._indic_drawing, this._old_indic_icon);
+			// Disconnect from events
+			this._qs_drawing.disconnect(this._qs_repaintId);
+			this._indic_drawing.disconnect(this._indic_repaintId);
+			this._pT._proxy.disconnect(this._powerProxyId);
+			// Force sync
+			Main.panel.statusArea.quickSettings._system._systemItem._powerToggle._sync();
+		}
 	}
 
 	_onPowerChanged() {
-		if (this._power._proxy.IsPresent) {
-			this._percentage = this._power._proxy.Percentage;
-			this._charging = this._power._proxy.State == UPower.DeviceState.CHARGING ;
-			this._idle = this._power._proxy.State == UPower.DeviceState.FULLY_CHARGED
-						|| this._power._proxy.State == UPower.DeviceState.PENDING_CHARGE ;
+		let proxy = this._pT._proxy;
+		if (proxy.IsPresent) {
+			this._percentage = proxy.Percentage;
+			this._charging = proxy.State == UPower.DeviceState.CHARGING ;
+			this._idle = proxy.State == UPower.DeviceState.FULLY_CHARGED
+						|| proxy.State == UPower.DeviceState.PENDING_CHARGE ;
 		} else {
 			this._percentage = null;
 			this._idle = false;
 			this._charging = false;
 		}
 		if (this._desktopSettings.get_boolean('show-battery-percentage')) {
-			this._indicator.add_style_class_name('circular-battery-indicator-text');
+			this._indic_drawing.add_style_class_name('circular-battery-indicator-text');
 		} else {
-			this._indicator.remove_style_class_name('circular-battery-indicator-text');
+			this._indic_drawing.remove_style_class_name('circular-battery-indicator-text');
 		}
-		this.updateDisplay();
+		this.update();
 	}
 
-	updateDisplay() {
-		if (this._percentage) {
-			this._indicator.queue_repaint();
-		}
+	update() {
+		this._indic_drawing.queue_repaint();
+		this._qs_drawing.queue_repaint();
 	}
 
-	destroy() {
-		this._power.replace_child(this._indicator, this._origIndicator);
-		this._indicator.disconnect(this._repaintId);
-		this._power._proxy.disconnect(this._powerProxyId);
-		this._indicator.destroy();
-	}
-
-	_paintIndicator(area) {
+	draw(area) {
 		let ctx = area.get_context();
 
-		let themeNode = this._indicator.get_theme_node();
+		let themeNode = this._indic_drawing.get_theme_node();
 		let color = themeNode.get_foreground_color();
 
 		let areaWidth = area.get_width();
@@ -136,7 +170,6 @@ class CircularBatteryIndicator extends GObject.Object {
 
 		ctx.restore();
 	}
-
 });
 
 let circularbatteryindicator;
@@ -147,4 +180,5 @@ function enable() {
 
 function disable() {
 	circularbatteryindicator.destroy();
+	circularbatteryindicator = null;
 }
