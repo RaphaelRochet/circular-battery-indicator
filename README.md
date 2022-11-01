@@ -13,6 +13,9 @@ To install, simply download as zip and unzip contents in ~/.local/share/gnome-sh
 
 ## Changes
 
+### v2
+- Major rework for Gnome 43's new quicksettings
+
 ### v1
 - Gnome 42
 - Minor refactoring, fix deprectaed call
