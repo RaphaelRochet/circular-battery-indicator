@@ -53,6 +53,7 @@ class CircularBatteryIndicator extends GObject.Object {
 		this._indic_drawing = new St.DrawingArea({ y_align: Clutter.ActorAlign.CENTER });
 		this._indic_drawing.set_width(Panel.PANEL_ICON_SIZE);
 		this._indic_drawing.set_height(Panel.PANEL_ICON_SIZE);
+		this._indic_drawing.add_style_class_name('circular-battery-indicator');
 		this._qs_drawing = new St.DrawingArea({ y_align: Clutter.ActorAlign.CENTER });
 		this._qs_drawing.set_width(Panel.PANEL_ICON_SIZE);
 		this._qs_drawing.set_height(Panel.PANEL_ICON_SIZE);
@@ -116,11 +117,6 @@ class CircularBatteryIndicator extends GObject.Object {
 			this._percentage = null;
 			this._idle = false;
 			this._charging = false;
-		}
-		if (this._desktopSettings.get_boolean('show-battery-percentage')) {
-			this._indic_drawing.add_style_class_name('circular-battery-indicator-text');
-		} else {
-			this._indic_drawing.remove_style_class_name('circular-battery-indicator-text');
 		}
 		this.update();
 	}
